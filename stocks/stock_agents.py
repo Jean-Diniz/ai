@@ -1,29 +1,44 @@
-
-import json 
 import os
-from datetime import datetime, timedelta
-from crewai import Agent, Task, Crew, Process
-from langchain_groq import ChatGroq
-from langchain.tools import Tool
+from datetime import datetime
+from crewai import Agent, Task, Crew, Process, LLM
 from langchain_community.tools import DuckDuckGoSearchResults
 from crewai_tools import CSVSearchTool
-import yfinance as yf
 from dotenv import load_dotenv
+from yahoo_finance_tool import YahooFinanceTool
 
 
 load_dotenv()
 
 os.environ["GROQ_API_KEY"] = os.getenv('GROQ_API_KEY')
 
-
-csvWalletTool = CSVSearchTool(csv='./Wallet/wallet.csv',)
-
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+llmLocal = LLM(
+    model="ollama/deepseek-r1:1.5b",
+    temperature=0.1,
+    base_url="http://localhost:11434"
+)
+llm = LLM(
+    model="groq/gemma2-9b-it",
     temperature=0.1,
     max_retries=2,
 )
-
+csvWalletTool = CSVSearchTool(
+    csv="Wallet.csv",
+    config=dict(
+        llm=dict(
+            provider="groq", # or google, openai, anthropic, llama2, ...
+            config=dict(
+                model="llama3-8b-8192",
+                temperature=0.7,
+            ),
+        ),
+        embedder=dict(
+            provider="ollama",
+            config=dict(
+                model="nomic-embed-text"
+            ),
+        ),
+    )
+)
 
 customerManager = Agent(
     role="Customer Stocks Manager",
@@ -32,24 +47,13 @@ customerManager = Agent(
     You are the client first contact and you provide the other analystis with the necessary stock ticket and wallet informa""",
     verbose=True,
     llm=llm,
-    max_iter= 5,
+    max_iter=5,
     tools=[csvWalletTool], 
     allow_delegation=False, 
     memory= True
 )
 
-
-def fetch_stock_price(ticket):
-    end_date = datetime.today()
-    start_date = end_date - timedelta(days=365)
-    stock= yf.download(ticket, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) 
-    return stock
-
-yahoo_finance_tool = Tool(
-    name="Yahoo Finance Tool",
-    description="Fetches stocks prices for {ticket} from the last year about a specific comapany from the Yahoo Finance API",
-    func= lambda ticket: fetch_stock_price(ticket)
-)
+yahoo_finance_tool = YahooFinanceTool()
 
 stocketPriceAnalyst = Agent(
     role="Stock Price Analyst",
@@ -99,10 +103,10 @@ newsAnalyst = Agent(
     memory= True
 )
 
-searchTool = DuckDuckGoSearchResults (backend='news', num_results=10)
+searchTool = DuckDuckGoSearchResults(backend='news', num_results=10)
 
 getNews = Task(
-    description= f"""Use the search tool to search news about the stock ticket.
+    description= f"""Use the search tool to search news about the stock {{ticket}}".
     The current date is {datetime.now()}
     Compose the results into a helpfull report.
     """,
@@ -151,7 +155,7 @@ copyWriter = Agent(
     You create complelling stories and narratives that resonate with the audience.""",
     verbose=True,
     llm=llm, 
-    max_iter= 5,
+    max_iter=5,
     allow_delegation=False, 
     memory= True
 )
@@ -163,9 +167,10 @@ writeNewsletter = Task(
     Include the recommendation in the newsletter.""",
     expected_output="""An eloquent 6 paragraph newsletter formated as Markdown in an easy readable manner. It should contai
     - Introduction set the overal picture
-    - Main part - provides the meat of the analysis including stock price trend, the news, the fear/greed score and the sum 3 bullets of the main summary reason of the recommendation
+    - Main part - provides the meat of the analysis including stock price trend, the news, the fear/greed score and the sum.
+    - 3 bullets of the main summary reason of the recommendation
     - Recommendation Summary
-    Recommendation it self""",
+    - Recommendation it self""",
     agent=copyWriter,
     context = [getStockPrice, getNews, recommendStock]
 )
@@ -181,4 +186,4 @@ crew = Crew(
     max_iter=15
 )
 
-result = crew.kickoff(inputs={"ticket": "Giver your thoughts abour Amazon Stocks"})
+result = crew.kickoff(inputs={"ticket": "Google Stocks"})
