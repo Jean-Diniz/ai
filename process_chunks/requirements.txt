@@ -1,0 +1,10 @@
+dotenv>=0.9.9
+google-api-python-client>=2.164.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.1
+langchain>=0.3.19
+langchain-community>=0.3.18
+langchain-google-genai>=2.0.11
+langchain-pinecone>=0.2.0
+pinecone>=6.0.2
+pip>=25.0.1
